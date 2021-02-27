@@ -1,4 +1,5 @@
 use bit_vec::BitVec;
+use std::fmt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::convert::TryInto;
@@ -53,7 +54,7 @@ impl InboundState {
         src: &SocketAddr,
     ) {
         if self.bitmap.get(content_packet.offset as usize).unwrap() {
-            println!("dup: {:?}", content_packet.offset);
+            println!("dup: {}", content_packet.offset);
             self.dups += 1;
         } else {
             self.file
@@ -99,7 +100,7 @@ impl InboundState {
         }
 
         request_packet.offset = self.lastreq;
-        println!("requesting block {:?}", request_packet.offset);
+        println!("requesting block {:>6}", request_packet.offset);
         let encoded: Vec<u8> = bincode::serialize(&request_packet).unwrap();
         socket.send_to(&encoded[..], &src).expect("cant send_to");
         self.requested += 1;
@@ -115,7 +116,7 @@ impl InboundState {
 
         self.file.set_len(self.len).expect("cant set length");
         println!(
-            "received {:?} dups {:?}",
+            "received {} dups {}",
             &hex::encode(&self.hash),
             self.dups
         );
@@ -127,7 +128,7 @@ impl InboundState {
             .as_slice()
             .try_into()
             .expect("Wrong length");
-        println!("verified hash {:?}", &hex::encode(&hash));
+        println!("verified hash {}", &hex::encode(&hash));
         std::assert_eq!(hash, self.hash);
     }
     fn request_missing_or_next(&mut self, socket: &UdpSocket, src: &SocketAddr) {
@@ -153,7 +154,7 @@ impl InboundState {
             hash: self.hash,
         };
         request_packet.offset = self.next_missing;
-        println!("requesting block {:?}", request_packet.offset);
+        println!("requesting block {:>6}", request_packet.offset);
         let encoded: Vec<u8> = bincode::serialize(&request_packet).unwrap();
         socket.send_to(&encoded[..], &src).expect("cant send_to");
         self.requested += 1;
@@ -162,11 +163,18 @@ impl InboundState {
 
 #[repr(C)]
 //#[derive(Copy,Clone)]
+#[derive(Debug)]
 struct ContentPacket {
     len: u64,
     offset: u64,
     hash: [u8; 256 / 8],
     data: [u8; ContentPacket::block_size() as usize], // serde had a strange 32 byte limit.  also serde would not be a portable network protocol format.
+}
+
+impl fmt::Display for ContentPacket {
+ fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "just an excuse to use Display")
+    }
 }
 
 impl ContentPacket {
@@ -230,6 +238,9 @@ fn send(pathname: &String, host: &String) -> Result<bool, std::io::Error> {
                 data: buffer,
             };
             started = true;
+            // excuse to support Debug and Display 
+            println!("sample content packet: {:?}",content_packet);
+            println!("content packet: {}",content_packet);
             send_block(content_packet, host, &socket, &file);
         } else {
             let mut buf = [0; std::mem::size_of::<ContentPacket>()];
@@ -246,7 +257,7 @@ fn send(pathname: &String, host: &String) -> Result<bool, std::io::Error> {
                 println!("sent!");
                 std::process::exit(0);
             }
-            println!("sending block: {:?}", req.offset);
+            println!("sending block: {}", req.offset);
             let content_packet = ContentPacket {
                 len: metadata.len(),
                 offset: req.offset,
@@ -270,7 +281,7 @@ fn receive() -> Result<bool, std::io::Error> {
         let mut buf = [0; std::mem::size_of::<ContentPacket>()]; //	[0; ::std::mem::size_of::ContentPacket];
         let (_amt, src) = socket.recv_from(&mut buf).expect("socket error");
         let content_packet: ContentPacket = unsafe { transmute(buf) };
-        println!("received block: {:?}", content_packet.offset);
+        println!("received block: {:>7}", content_packet.offset);
 
         if !inbound_states.contains_key(&content_packet.hash) {
             inbound_states.insert(content_packet.hash, InboundState::new(&content_packet));
