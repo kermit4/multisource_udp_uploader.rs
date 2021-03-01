@@ -29,24 +29,6 @@ struct InboundState {
 }
 
 impl InboundState {
-    fn new(content_packet: &ContentPacket) -> Result<InboundState, std::io::Error>  {
-        Ok(InboundState {
-                lastreq: 0,
-                file:  // File::create(
-				OpenOptions::new().create(true).read(true).write(true)
-                    .open(Path::new(&hex::encode(content_packet.hash)))?,
-                len: content_packet.len,
-                blocks_remaining: blocks(content_packet.len),
-                next_missing: 0,
-                highest_seen: 0,
-				hash_checked: false,
-                hash: content_packet.hash,
-                requested: 0,
-                bitmap: BitVec::from_elem(blocks(content_packet.len) as usize, false),
-                dups:0,
-            })
-    }
-
     fn handle_content_packet  (
         &mut self,
         content_packet: &ContentPacket,
@@ -183,6 +165,24 @@ impl ContentPacket {
     const fn block_size() -> u64 {
         1___0___2___4 // pointless use of Rust underline feature
     }
+    fn new_inbound_state (&self) -> Result<InboundState, std::io::Error>  {
+        Ok(InboundState {
+                lastreq: 0,
+                file:  // File::create(
+				OpenOptions::new().create(true).read(true).write(true)
+                    .open(Path::new(&hex::encode(self.hash)))?,
+                len: self.len,
+                blocks_remaining: blocks(self.len),
+                next_missing: 0,
+                highest_seen: 0,
+				hash_checked: false,
+                hash: self.hash,
+                requested: 0,
+                bitmap: BitVec::from_elem(blocks(self.len) as usize, false),
+                dups:0,
+            })
+    }
+
     fn send (
         &mut self,
         host: &String,
@@ -282,7 +282,7 @@ fn receive() -> Result<(), std::io::Error> {
         println!("received block: {:>7}", content_packet.offset);
 
         if !inbound_states.contains_key(&content_packet.hash) {
-            inbound_states.insert(content_packet.hash, InboundState::new(&content_packet)?);
+            inbound_states.insert(content_packet.hash, content_packet.new_inbound_state()?);
         }
         inbound_states
             .get_mut(&content_packet.hash)

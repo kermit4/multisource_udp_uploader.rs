@@ -1,3 +1,4 @@
+This repo is only to demonstrate my Rust skill level.  The code isn't very useful (unless you're curious about a simple network streaming flow control algorithm.)
 
 I'm now attempting to use more Rust features and development tools than necessary, as it was working after 8 hours and full featured after 14.
 
