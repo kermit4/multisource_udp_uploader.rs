@@ -1,4 +1,3 @@
-THIS IS JUST A DEMO OF MY RUST SKILL LEVEL AND LEARNING SPEED, IT IS NOT ACTUALLY VERY USEFUL
 
 I'm now attempting to use more Rust features and development tools than necessary, as it was working after 8 hours and full featured after 14.
 
