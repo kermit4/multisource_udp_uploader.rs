@@ -165,7 +165,7 @@ impl InboundState {
 
 #[repr(C)]
 //#[derive(Copy,Clone)]
-#[derive(Debug)]
+#[derive(Debug,Copy,Clone)]
 struct ContentPacket {
     len: u64,
     offset: u64,
@@ -182,6 +182,26 @@ impl fmt::Display for ContentPacket {
 impl ContentPacket {
     const fn block_size() -> u64 {
         1___0___2___4 // pointless use of Rust underline feature
+    }
+    fn send (
+        &mut self,
+        host: &String,
+        socket: &UdpSocket,
+        file: &File,
+    ) -> Result<(), std::io::Error>  {
+        file.read_at(
+            &mut self.data,
+            self.offset * ContentPacket::block_size(),
+        )?;
+        let encoded: [u8; std::mem::size_of::<Self>()] =
+            unsafe { transmute(*self) };
+        socket.send_to(&encoded[..], host).expect("cant send_to");
+        // excuse to support Debug and Display 
+        if self.offset == 0 {
+            println!("sample content packet: {:?}",self);
+            println!("content packet: {}",self);
+        }
+        Ok(())
     }
 }
 
@@ -209,22 +229,6 @@ fn send(pathname: &String, host: &String) -> Result<(), std::io::Error> {
     let buffer = [0; ContentPacket::block_size() as usize]; // vec![0; 32 as usize];
     let mut started = false;
 
-    fn send_block (
-        mut content_packet: ContentPacket,
-        host: &String,
-        socket: &UdpSocket,
-        file: &File,
-    ) -> Result<(), std::io::Error>  {
-        file.read_at(
-            &mut content_packet.data,
-            content_packet.offset * ContentPacket::block_size(),
-        )?;
-        let encoded: [u8; std::mem::size_of::<ContentPacket>()] =
-            unsafe { transmute(content_packet) };
-        socket.send_to(&encoded[..], host).expect("cant send_to");
-        Ok(())
-    }
-
     let mut sha256 = Sha256::new();
     copy(&mut file, &mut sha256)?;
     let hash = sha256
@@ -233,41 +237,32 @@ fn send(pathname: &String, host: &String) -> Result<(), std::io::Error> {
         .try_into()
         .expect("wrong length");
     loop {
-        if !started {
-            let content_packet = ContentPacket {
-                len: metadata.len(),
-                offset: 0,
-                hash: hash,
-                data: buffer,
+        let mut offset=0;
+        if started {
+            let mut buf = [0; std::mem::size_of::<ContentPacket>()];
+            match socket.recv_from(&mut buf) {
+                Ok(_r) => true,
+                Err(_e) => {
+                    started = false;
+                    println!("stalled, bumping");
+                    continue;
+                }
             };
-            started = true;
-            // excuse to support Debug and Display 
-            println!("sample content packet: {:?}",content_packet);
-            println!("content packet: {}",content_packet);
-            send_block(content_packet, host, &socket, &file)?;
-        } 
-        let mut buf = [0; std::mem::size_of::<ContentPacket>()];
-        match socket.recv_from(&mut buf) {
-            Ok(_r) => true,
-            Err(_e) => {
-                started = false;
-                println!("stalled, bumping");
-                continue;
+            let req: RequestPacket = bincode::deserialize(&buf).unwrap();
+            offset=req.offset;
+            if offset == !0 {
+                println!("sent!");
+                break;
             }
-        };
-        let req: RequestPacket = bincode::deserialize(&buf).unwrap();
-        if req.offset == !0 {
-            println!("sent!");
-            break;
         }
-        println!("sending block: {}", req.offset);
-        let content_packet = ContentPacket {
+        println!("sending block: {}", offset);
+        ContentPacket {
             len: metadata.len(),
-            offset: req.offset,
+            offset: offset,
             hash: hash,
             data: buffer,
-        };
-        send_block(content_packet, host, &socket, &file)?;
+        }.send(host, &socket, &file)?;
+        started=true;
     }
     Ok(())
 }
