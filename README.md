@@ -12,7 +12,7 @@ I'm now attempting to use more Rust features and development tools than necessar
 
 If run with no args, it will listen for uploads.
 
-Clients from different sources can participate in the upload.
+Clients from different sources can participate in the upload.  Clients do not hold state about the transfer.
 
 With args it will send a file.  
 
