@@ -36,7 +36,7 @@ impl InboundState {
         src: &SocketAddr,
     ) -> Result<(), std::io::Error> {
         if self.bitmap.get(content_packet.offset as usize).unwrap() {
-            println!("dup: {}", content_packet.offset);
+            println!("dup: {} dups: {}", content_packet.offset,self.dups);
             self.dups += 1;
         } else {
             self.file.write_at(
@@ -50,6 +50,7 @@ impl InboundState {
             }
         }
 
+        println!("received block: {:>7}  remaining: {}", content_packet.offset,self.blocks_remaining);
         if self.blocks_remaining == 0 {
             if !self.hash_checked {
                 self.check_hash()?;
@@ -213,7 +214,7 @@ fn main() -> Result<(), std::io::Error> {
 
 fn send(pathname: &String, host: &String) -> Result<(), std::io::Error> {
     let socket = UdpSocket::bind("0.0.0.0:0")?;
-    socket.set_read_timeout(Some(Duration::new(5, 0)))?;
+    socket.set_read_timeout(Some(Duration::new(1, 0)))?;
     let mut file = File::open(pathname)?;
     let metadata = fs::metadata(&pathname)?;
     let buffer = [0; ContentPacket::block_size() as usize]; // vec![0; 32 as usize];
@@ -270,7 +271,6 @@ fn receive() -> Result<(), std::io::Error> {
         let mut buf = [0; std::mem::size_of::<ContentPacket>()]; //	[0; ::std::mem::size_of::ContentPacket];
         let (_amt, src) = socket.recv_from(&mut buf).expect("socket error");
         let content_packet: ContentPacket = unsafe { transmute(buf) };
-        println!("received block: {:>7}", content_packet.offset);
 
         if !inbound_states.contains_key(&content_packet.hash) {
             inbound_states.insert(content_packet.hash, content_packet.new_inbound_state()?);
