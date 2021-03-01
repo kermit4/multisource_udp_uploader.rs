@@ -1,7 +1,7 @@
 WORKING AND FULL FEATURED
 
 
-This repo is snapshot to show my Rust learning speed and the applicability of my non-Rust background to Rust proprogramming.
+This repo is snapshot to show my Rust learning speed and the applicability of my non-Rust background to Rust programming.
 
 I'm now attempting to use more Rust features and development tools than necessary, as it was working after 8 hours and full featured after 14.
 
