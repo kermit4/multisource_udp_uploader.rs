@@ -168,7 +168,7 @@ struct ContentPacket {
     len: u64,
     offset: u64,
     hash: [u8; 256 / 8],
-    data: [u8; ContentPacket::block_size() as usize], // serde had a strange 32 byte limit.  also serde would not be a portable network protocol format.
+    data: [u8; ContentPacket::block_size() as usize], // serde had a strange 33 byte limit.  also serde would not be a portable network protocol format.
 }
 
 impl fmt::Display for ContentPacket {
@@ -179,7 +179,7 @@ impl fmt::Display for ContentPacket {
 
 impl ContentPacket {
     const fn block_size() -> u64 {
-        1024
+        1___0___2___4 // pointless use of Rust underline feature
     }
 }
 
@@ -242,31 +242,31 @@ fn send(pathname: &String, host: &String) -> Result<bool, std::io::Error> {
             println!("sample content packet: {:?}",content_packet);
             println!("content packet: {}",content_packet);
             send_block(content_packet, host, &socket, &file);
-        } else {
-            let mut buf = [0; std::mem::size_of::<ContentPacket>()];
-            match socket.recv_from(&mut buf) {
-                Ok(_r) => true,
-                Err(_e) => {
-                    started = false;
-                    println!("stalled, bumping");
-                    continue;
-                }
-            };
-            let req: RequestPacket = bincode::deserialize(&buf).unwrap();
-            if req.offset == !0 {
-                println!("sent!");
-                std::process::exit(0);
+        } 
+        let mut buf = [0; std::mem::size_of::<ContentPacket>()];
+        match socket.recv_from(&mut buf) {
+            Ok(_r) => true,
+            Err(_e) => {
+                started = false;
+                println!("stalled, bumping");
+                continue;
             }
-            println!("sending block: {}", req.offset);
-            let content_packet = ContentPacket {
-                len: metadata.len(),
-                offset: req.offset,
-                hash: hash,
-                data: buffer,
-            };
-            send_block(content_packet, host, &socket, &file);
+        };
+        let req: RequestPacket = bincode::deserialize(&buf).unwrap();
+        if req.offset == !0 {
+            println!("sent!");
+            break;
         }
+        println!("sending block: {}", req.offset);
+        let content_packet = ContentPacket {
+            len: metadata.len(),
+            offset: req.offset,
+            hash: hash,
+            data: buffer,
+        };
+        send_block(content_packet, host, &socket, &file);
     }
+    Result::Ok(true)
 }
 
 fn blocks(len: u64) -> u64 {
