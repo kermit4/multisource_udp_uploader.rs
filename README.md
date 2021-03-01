@@ -1,7 +1,11 @@
 WORKING AND FULL FEATURED
 
 
-This repo is snapshot to show my Rust learning speed and the applicability of my non-Rust background to Rust programming.
+This repo is only a snapshot to show my Rust learning speed, the applicability of my non-Rust background to Rust programming, and knowledge of Rust features:
+
+https://github.com/kermit4/first_2_hours_of_rust     
+https://github.com/kermit4/first_8_hours_of_rust     
+https://github.com/kermit4/first_16_hours_of_rust      (this repo)
 
 I'm now attempting to use more Rust features and development tools than necessary, as it was working after 8 hours and full featured after 14.
 
