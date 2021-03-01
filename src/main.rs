@@ -29,12 +29,12 @@ struct InboundState {
 }
 
 impl InboundState {
-    fn new(content_packet: &ContentPacket) -> InboundState {
-        InboundState {
+    fn new(content_packet: &ContentPacket) -> Result<InboundState, std::io::Error>  {
+        Ok(InboundState {
                 lastreq: 0,
                 file:  // File::create(
 				OpenOptions::new().create(true).read(true).write(true)
-                    .open(Path::new(&hex::encode(content_packet.hash))).expect("cant open file"),
+                    .open(Path::new(&hex::encode(content_packet.hash)))?,
                 len: content_packet.len,
                 blocks_remaining: blocks(content_packet.len),
                 next_missing: 0,
@@ -44,15 +44,15 @@ impl InboundState {
                 requested: 0,
                 bitmap: BitVec::from_elem(blocks(content_packet.len) as usize, false),
                 dups:0,
-            }
+            })
     }
 
-    fn handle_content_packet(
+    fn handle_content_packet  (
         &mut self,
         content_packet: &ContentPacket,
         socket: &UdpSocket,
         src: &SocketAddr,
-    ) {
+    )-> Result<(),std::io::Error> {
         if self.bitmap.get(content_packet.offset as usize).unwrap() {
             println!("dup: {}", content_packet.offset);
             self.dups += 1;
@@ -62,7 +62,7 @@ impl InboundState {
                     &content_packet.data,
                     content_packet.offset * ContentPacket::block_size(),
                 )
-                .expect("cant write");
+                ?;
             self.blocks_remaining -= 1;
             self.bitmap.set(content_packet.offset as usize, true);
             if content_packet.offset > self.highest_seen {
@@ -72,7 +72,7 @@ impl InboundState {
 
         if self.blocks_remaining == 0 {
             if !self.hash_checked {
-                self.check_hash();
+                self.check_hash()?;
                 self.hash_checked = true;
                 drop(&self.file); // free up a file descriptor
             }
@@ -85,6 +85,7 @@ impl InboundState {
         } else {
             self.request_more(socket, src);
         }
+        Ok(())
     }
 
     fn request_more(&mut self, socket: &UdpSocket, src: &SocketAddr) {
@@ -111,10 +112,10 @@ impl InboundState {
         }
     }
 
-    fn check_hash(&mut self) {
+    fn check_hash(&mut self)  -> Result<(), std::io::Error> {
         // upload done
 
-        self.file.set_len(self.len).expect("cant set length");
+        self.file.set_len(self.len)?;
         println!(
             "received {} dups {}",
             &hex::encode(&self.hash),
@@ -122,14 +123,15 @@ impl InboundState {
         );
         //			self.remove(&hex::encode(content_packet.hash));  this will just start over if packets are in flight, so it needs a delay
         let mut sha256 = Sha256::new();
-        copy(&mut self.file, &mut sha256).expect("cant sha256 file");
+        copy(&mut self.file, &mut sha256)?;
         let hash: [u8; 256 / 8] = sha256
             .finalize()
             .as_slice()
             .try_into()
-            .expect("Wrong length");
+            .expect("Wrong Length");
         println!("verified hash {}", &hex::encode(&hash));
         std::assert_eq!(hash, self.hash);
+        Ok(())
     }
     fn request_missing_or_next(&mut self, socket: &UdpSocket, src: &SocketAddr) {
         if self.next_missing > self.highest_seen {
@@ -168,7 +170,7 @@ struct ContentPacket {
     len: u64,
     offset: u64,
     hash: [u8; 256 / 8],
-    data: [u8; ContentPacket::block_size() as usize], // serde had a strange 33 byte limit.  also serde would not be a portable network protocol format.
+    data: [u8; ContentPacket::block_size() as usize], // serde had a strange 32 byte limit.  also serde would not be a portable network protocol format.
 }
 
 impl fmt::Display for ContentPacket {
@@ -189,37 +191,38 @@ struct RequestPacket {
     hash: [u8; 256 / 8],
 }
 
-fn main() {
+fn main() -> Result<(), std::io::Error>  {
     let args: Vec<String> = env::args().collect();
     if args.len() > 2 {
-        send(&args[1], &args[2]).expect("send()");
+        send(&args[1], &args[2])?;
     } else {
-        receive().expect("receive");
+        receive()?;
     }
+    Ok(())
 }
 
-fn send(pathname: &String, host: &String) -> Result<bool, std::io::Error> {
-    let socket = UdpSocket::bind("0.0.0.0:0").expect("bind failed");
+fn send(pathname: &String, host: &String) -> Result<(), std::io::Error> {
+    let socket = UdpSocket::bind("0.0.0.0:0")?;
     socket.set_read_timeout(Some(Duration::new(5, 0)))?;
     let mut file = File::open(pathname)?;
-    let metadata = fs::metadata(&pathname).expect("unable to read metadata");
+    let metadata = fs::metadata(&pathname)?;
     let buffer = [0; ContentPacket::block_size() as usize]; // vec![0; 32 as usize];
     let mut started = false;
 
-    fn send_block(
+    fn send_block (
         mut content_packet: ContentPacket,
         host: &String,
         socket: &UdpSocket,
         file: &File,
-    ) {
+    ) -> Result<(), std::io::Error>  {
         file.read_at(
             &mut content_packet.data,
             content_packet.offset * ContentPacket::block_size(),
-        )
-        .expect("cant read");
+        )?;
         let encoded: [u8; std::mem::size_of::<ContentPacket>()] =
             unsafe { transmute(content_packet) };
         socket.send_to(&encoded[..], host).expect("cant send_to");
+        Ok(())
     }
 
     let mut sha256 = Sha256::new();
@@ -228,7 +231,7 @@ fn send(pathname: &String, host: &String) -> Result<bool, std::io::Error> {
         .finalize()
         .as_slice()
         .try_into()
-        .expect("Wrong length");
+        .expect("wrong length");
     loop {
         if !started {
             let content_packet = ContentPacket {
@@ -241,7 +244,7 @@ fn send(pathname: &String, host: &String) -> Result<bool, std::io::Error> {
             // excuse to support Debug and Display 
             println!("sample content packet: {:?}",content_packet);
             println!("content packet: {}",content_packet);
-            send_block(content_packet, host, &socket, &file);
+            send_block(content_packet, host, &socket, &file)?;
         } 
         let mut buf = [0; std::mem::size_of::<ContentPacket>()];
         match socket.recv_from(&mut buf) {
@@ -264,17 +267,17 @@ fn send(pathname: &String, host: &String) -> Result<bool, std::io::Error> {
             hash: hash,
             data: buffer,
         };
-        send_block(content_packet, host, &socket, &file);
+        send_block(content_packet, host, &socket, &file)?;
     }
-    Result::Ok(true)
+    Ok(())
 }
 
 fn blocks(len: u64) -> u64 {
     return (len + ContentPacket::block_size() - 1) / ContentPacket::block_size();
 }
 
-fn receive() -> Result<bool, std::io::Error> {
-    let socket = UdpSocket::bind("0.0.0.0:34254").expect("bind failed");
+fn receive() -> Result<(), std::io::Error> {
+    let socket = UdpSocket::bind("0.0.0.0:34254")?;
     use std::collections::HashMap;
     let mut inbound_states = HashMap::new();
     loop {
@@ -284,11 +287,11 @@ fn receive() -> Result<bool, std::io::Error> {
         println!("received block: {:>7}", content_packet.offset);
 
         if !inbound_states.contains_key(&content_packet.hash) {
-            inbound_states.insert(content_packet.hash, InboundState::new(&content_packet));
+            inbound_states.insert(content_packet.hash, InboundState::new(&content_packet)?);
         }
         inbound_states
             .get_mut(&content_packet.hash)
             .unwrap()
-            .handle_content_packet(&content_packet, &socket, &src);
+            .handle_content_packet(&content_packet, &socket, &src)?;
     }
 }
