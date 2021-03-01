@@ -10,6 +10,8 @@ I'm now attempting to use more Rust features and development tools than necessar
 
 If run with no args, it will listen for uploads.
 
+Clients from different sources can participate in the upload.
+
 With args it will send a file.  
 
 i.e.
