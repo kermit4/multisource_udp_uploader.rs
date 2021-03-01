@@ -18,10 +18,8 @@ With args it will send a file.
 
 i.e.
 ```
-cargo build
-./target/debug/udp_uploader &
-sleep 1
-./target/debug/udp_uploader /etc/passwd 127.0.0.1:34254
+cargo run &
+./target/debug/udp_uploader /etc/passwd localhost:34254
 ```
 
 should result in a file of the same content named by its sha256
