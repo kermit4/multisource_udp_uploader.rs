@@ -1,9 +1,9 @@
 use bit_vec::BitVec;
-use std::fmt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::convert::TryInto;
 use std::env;
+use std::fmt;
 use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
@@ -29,22 +29,20 @@ struct InboundState {
 }
 
 impl InboundState {
-    fn handle_content_packet  (
+    fn handle_content_packet(
         &mut self,
         content_packet: &ContentPacket,
         socket: &UdpSocket,
         src: &SocketAddr,
-    )-> Result<(),std::io::Error> {
+    ) -> Result<(), std::io::Error> {
         if self.bitmap.get(content_packet.offset as usize).unwrap() {
             println!("dup: {}", content_packet.offset);
             self.dups += 1;
         } else {
-            self.file
-                .write_at(
-                    &content_packet.data,
-                    content_packet.offset * ContentPacket::block_size(),
-                )
-                ?;
+            self.file.write_at(
+                &content_packet.data,
+                content_packet.offset * ContentPacket::block_size(),
+            )?;
             self.blocks_remaining -= 1;
             self.bitmap.set(content_packet.offset as usize, true);
             if content_packet.offset > self.highest_seen {
@@ -94,15 +92,11 @@ impl InboundState {
         }
     }
 
-    fn check_hash(&mut self)  -> Result<(), std::io::Error> {
+    fn check_hash(&mut self) -> Result<(), std::io::Error> {
         // upload done
 
         self.file.set_len(self.len)?;
-        println!(
-            "received {} dups {}",
-            &hex::encode(&self.hash),
-            self.dups
-        );
+        println!("received {} dups {}", &hex::encode(&self.hash), self.dups);
         //			self.remove(&hex::encode(content_packet.hash));  this will just start over if packets are in flight, so it needs a delay
         let mut sha256 = Sha256::new();
         copy(&mut self.file, &mut sha256)?;
@@ -147,7 +141,7 @@ impl InboundState {
 
 #[repr(C)]
 //#[derive(Copy,Clone)]
-#[derive(Debug,Copy,Clone)]
+#[derive(Debug, Copy, Clone)]
 struct ContentPacket {
     len: u64,
     offset: u64,
@@ -156,7 +150,7 @@ struct ContentPacket {
 }
 
 impl fmt::Display for ContentPacket {
- fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "just an excuse to use Display")
     }
 }
@@ -165,7 +159,7 @@ impl ContentPacket {
     const fn block_size() -> u64 {
         1___0___2___4 // pointless use of Rust underline feature
     }
-    fn new_inbound_state (&self) -> Result<InboundState, std::io::Error>  {
+    fn new_inbound_state(&self) -> Result<InboundState, std::io::Error> {
         Ok(InboundState {
                 lastreq: 0,
                 file:  // File::create(
@@ -183,23 +177,19 @@ impl ContentPacket {
             })
     }
 
-    fn send (
+    fn send(
         &mut self,
         host: &String,
         socket: &UdpSocket,
         file: &File,
-    ) -> Result<(), std::io::Error>  {
-        file.read_at(
-            &mut self.data,
-            self.offset * ContentPacket::block_size(),
-        )?;
-        let encoded: [u8; std::mem::size_of::<Self>()] =
-            unsafe { transmute(*self) };
+    ) -> Result<(), std::io::Error> {
+        file.read_at(&mut self.data, self.offset * ContentPacket::block_size())?;
+        let encoded: [u8; std::mem::size_of::<Self>()] = unsafe { transmute(*self) };
         socket.send_to(&encoded[..], host).expect("cant send_to");
-        // excuse to support Debug and Display 
+        // excuse to support Debug and Display
         if self.offset == 0 {
-            println!("sample content packet: {:?}",self);
-            println!("content packet: {}",self);
+            println!("sample content packet: {:?}", self);
+            println!("content packet: {}", self);
         }
         Ok(())
     }
@@ -211,7 +201,7 @@ struct RequestPacket {
     hash: [u8; 256 / 8],
 }
 
-fn main() -> Result<(), std::io::Error>  {
+fn main() -> Result<(), std::io::Error> {
     let args: Vec<String> = env::args().collect();
     if args.len() > 2 {
         send(&args[1], &args[2])?;
@@ -237,7 +227,7 @@ fn send(pathname: &String, host: &String) -> Result<(), std::io::Error> {
         .try_into()
         .expect("wrong length");
     loop {
-        let mut offset=0;
+        let mut offset = 0;
         if started {
             let mut buf = [0; std::mem::size_of::<ContentPacket>()];
             match socket.recv_from(&mut buf) {
@@ -249,7 +239,7 @@ fn send(pathname: &String, host: &String) -> Result<(), std::io::Error> {
                 }
             };
             let req: RequestPacket = bincode::deserialize(&buf).unwrap();
-            offset=req.offset;
+            offset = req.offset;
             if offset == !0 {
                 println!("sent!");
                 break;
@@ -261,8 +251,9 @@ fn send(pathname: &String, host: &String) -> Result<(), std::io::Error> {
             offset: offset,
             hash: hash,
             data: buffer,
-        }.send(host, &socket, &file)?;
-        started=true;
+        }
+        .send(host, &socket, &file)?;
+        started = true;
     }
     Ok(())
 }
