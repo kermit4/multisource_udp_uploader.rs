@@ -93,8 +93,8 @@ impl InboundState {
         }
     }
 
-    fn check_hash(&mut self) -> Result<(), std::io::Error> {
-        // upload done
+    // upload done
+    fn check_hash(&mut self) -> Result<(), std::io::Error> { // this could be processed as received to reduce latency, but that may miss bugs
 
         self.file.set_len(self.len)?;
         println!("received {} dups {}", &hex::encode(&self.hash), self.dups);
@@ -152,7 +152,7 @@ struct ContentPacket {
 
 impl fmt::Display for ContentPacket {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "just an excuse to use Display")
+        write!(f, "nothing here, just an excuse to use Display")
     }
 }
 
@@ -189,7 +189,6 @@ impl ContentPacket {
         socket.send_to(&encoded[..], host).expect("cant send_to");
         // excuse to support Debug and Display
         if self.offset == 0 {
-            println!("sample content packet: {:?}", self);
             println!("content packet: {}", self);
         }
         Ok(())
