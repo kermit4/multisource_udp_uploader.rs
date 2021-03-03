@@ -23,7 +23,7 @@ struct InboundState {
     requested: u64,
     highest_seen: u64,
     bitmap: BitVec,
-    lastreq: u64,
+    highest_requested: u64,
     hash_checked: bool,
     dups: u64,
     start_time: SystemTime,
@@ -53,7 +53,7 @@ impl InboundState {
             "received block: {:>7}  remaining: {} window(est): {} avg B/s: {} ",
             content_packet.offset,
             self.blocks_remaining,
-            self.lastreq - self.highest_seen,
+            self.highest_requested - self.highest_seen,
             (self.len - self.blocks_remaining * block_size())
                 / (self.start_time.elapsed().unwrap().as_secs() + 1)
         );
@@ -76,18 +76,17 @@ impl InboundState {
     }
 
     fn request_more(&mut self, socket: &UdpSocket, src: &SocketAddr) {
-        let mut request_packet = RequestPacket {
-            offset: 0,
-            hash: self.hash,
-        };
-        self.lastreq += 1;
-        if self.lastreq >= blocks(self.len) {
+        if self.highest_requested + 1 >= blocks(self.len) {
             // "done" but just filling in holes now
             self.request_missing_or_next(&socket, &src);
             return;
         }
+        self.highest_requested += 1;
 
-        request_packet.offset = self.lastreq;
+        let mut request_packet = RequestPacket {
+            offset: self.highest_requested;
+            hash: self.hash,
+        };
         println!("requesting block {:>6}", request_packet.offset);
         let encoded: Vec<u8> = bincode::serialize(&request_packet).unwrap();
         socket.send_to(&encoded[..], &src).expect("cant send_to");
@@ -128,18 +127,17 @@ impl InboundState {
         } {}
         if self.next_missing > self.highest_seen {
             // nothing missing
-            if self.lastreq + 1 >= blocks(self.len) {
+            if self.highest_requested + 1 >= blocks(self.len) {
                 // on the tail, dont dup the window
                 return;
             }
-            self.lastreq += 1; // just increase window
-            self.next_missing = self.lastreq;
+            self.highest_requested += 1; // just increase window
+            self.next_missing = self.highest_requested;
         }
         let mut request_packet = RequestPacket {
-            offset: 0,
+            offset: self.next_missing;
             hash: self.hash,
         };
-        request_packet.offset = self.next_missing;
         println!("requesting block {:>6}", request_packet.offset);
         let encoded: Vec<u8> = bincode::serialize(&request_packet).unwrap();
         socket.send_to(&encoded[..], &src).expect("cant send_to");
@@ -169,7 +167,7 @@ const fn block_size() -> u64 {
 impl ContentPacket {
     fn new_inbound_state(&self) -> Result<InboundState, std::io::Error> {
         Ok(InboundState {
-                lastreq: 0,
+                highest_requested: 0,
                 file:  // File::create(
 				OpenOptions::new().create(true).read(true).write(true)
                     .open(Path::new(&hex::encode(self.hash)))?,
