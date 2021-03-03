@@ -5,7 +5,6 @@ use std::convert::TryInto;
 use std::env;
 use std::fmt;
 use std::fs;
-use std::time::{Duration, SystemTime};
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::copy;
@@ -13,6 +12,7 @@ use std::mem::transmute;
 use std::net::{SocketAddr, UdpSocket};
 use std::os::unix::fs::FileExt;
 use std::path::Path;
+use std::time::{Duration, SystemTime};
 
 struct InboundState {
     file: File,
@@ -37,13 +37,11 @@ impl InboundState {
         src: &SocketAddr,
     ) -> Result<(), std::io::Error> {
         if self.bitmap.get(content_packet.offset as usize).unwrap() {
-            println!("dup: {} dups: {}", content_packet.offset,self.dups);
+            println!("dup: {} dups: {}", content_packet.offset, self.dups);
             self.dups += 1;
         } else {
-            self.file.write_at(
-                &content_packet.data,
-                content_packet.offset * block_size(),
-            )?;
+            self.file
+                .write_at(&content_packet.data, content_packet.offset * block_size())?;
             self.blocks_remaining -= 1;
             self.bitmap.set(content_packet.offset as usize, true);
             if content_packet.offset > self.highest_seen {
@@ -51,8 +49,14 @@ impl InboundState {
             }
         }
 
-        println!("received block: {:>7}  remaining: {} window(est): {} avg B/s: {} ", content_packet.offset,self.blocks_remaining,self.lastreq-self.highest_seen,  (self.len-self.blocks_remaining*
-               block_size())/(self.start_time.elapsed().unwrap().as_secs()+1));
+        println!(
+            "received block: {:>7}  remaining: {} window(est): {} avg B/s: {} ",
+            content_packet.offset,
+            self.blocks_remaining,
+            self.lastreq - self.highest_seen,
+            (self.len - self.blocks_remaining * block_size())
+                / (self.start_time.elapsed().unwrap().as_secs() + 1)
+        );
         if self.blocks_remaining == 0 {
             if !self.hash_checked {
                 self.check_hash()?;
@@ -96,7 +100,8 @@ impl InboundState {
     }
 
     // upload done
-    fn check_hash(&mut self) -> Result<(), std::io::Error> { // this could be processed as received to reduce latency, but that may miss bugs
+    fn check_hash(&mut self) -> Result<(), std::io::Error> {
+        // this could be processed as received to reduce latency, but that may miss bugs
 
         self.file.set_len(self.len)?;
         println!("received {} dups {}", &hex::encode(&self.hash), self.dups);
