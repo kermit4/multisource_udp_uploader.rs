@@ -30,6 +30,27 @@ struct InboundState {
 }
 
 impl InboundState {
+
+
+    // upload done
+    fn check_hash(&mut self) -> Result<(), std::io::Error> {
+        // this could be processed as received to reduce latency, but that may miss bugs
+
+        self.file.set_len(self.len)?;
+        println!("received {} dups {}", &hex::encode(&self.hash), self.dups);
+        //			self.remove(&hex::encode(content_packet.hash));  this will just start over if packets are in flight, so it needs a delay
+        let mut sha256 = Sha256::new();
+        copy(&mut self.file, &mut sha256)?;
+        let hash: [u8; 256 / 8] = sha256
+            .finalize()
+            .as_slice()
+            .try_into()
+            .expect("Wrong Length");
+        println!("verified hash {}", &hex::encode(&hash));
+        std::assert_eq!(hash, self.hash);
+        Ok(())
+    }
+
     fn handle_content_packet(
         &mut self,
         content_packet: &ContentPacket,
@@ -98,24 +119,6 @@ impl InboundState {
         }
     }
 
-    // upload done
-    fn check_hash(&mut self) -> Result<(), std::io::Error> {
-        // this could be processed as received to reduce latency, but that may miss bugs
-
-        self.file.set_len(self.len)?;
-        println!("received {} dups {}", &hex::encode(&self.hash), self.dups);
-        //			self.remove(&hex::encode(content_packet.hash));  this will just start over if packets are in flight, so it needs a delay
-        let mut sha256 = Sha256::new();
-        copy(&mut self.file, &mut sha256)?;
-        let hash: [u8; 256 / 8] = sha256
-            .finalize()
-            .as_slice()
-            .try_into()
-            .expect("Wrong Length");
-        println!("verified hash {}", &hex::encode(&hash));
-        std::assert_eq!(hash, self.hash);
-        Ok(())
-    }
     fn request_missing_or_next(&mut self, socket: &UdpSocket, src: &SocketAddr) {
         if self.next_missing > self.highest_seen {
             self.next_missing = 0;
