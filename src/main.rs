@@ -5,6 +5,7 @@ use std::convert::TryInto;
 use std::env;
 use std::fmt;
 use std::fs;
+use std::time::{Duration, SystemTime};
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::copy;
@@ -12,7 +13,6 @@ use std::mem::transmute;
 use std::net::{SocketAddr, UdpSocket};
 use std::os::unix::fs::FileExt;
 use std::path::Path;
-use std::time::Duration;
 
 struct InboundState {
     file: File,
@@ -26,6 +26,7 @@ struct InboundState {
     lastreq: u64,
     hash_checked: bool,
     dups: u64,
+    start_time: SystemTime,
 }
 
 impl InboundState {
@@ -41,7 +42,7 @@ impl InboundState {
         } else {
             self.file.write_at(
                 &content_packet.data,
-                content_packet.offset * ContentPacket::block_size(),
+                content_packet.offset * block_size(),
             )?;
             self.blocks_remaining -= 1;
             self.bitmap.set(content_packet.offset as usize, true);
@@ -50,7 +51,8 @@ impl InboundState {
             }
         }
 
-        println!("received block: {:>7}  remaining: {}", content_packet.offset,self.blocks_remaining);
+        println!("received block: {:>7}  remaining: {} window(est): {} avg B/s: {} ", content_packet.offset,self.blocks_remaining,self.lastreq-self.highest_seen,  (self.len-self.blocks_remaining*
+               block_size())/(self.start_time.elapsed().unwrap().as_secs()+1));
         if self.blocks_remaining == 0 {
             if !self.hash_checked {
                 self.check_hash()?;
@@ -147,7 +149,7 @@ struct ContentPacket {
     len: u64,
     offset: u64,
     hash: [u8; 256 / 8],
-    data: [u8; ContentPacket::block_size() as usize], // serde had a strange 32 byte limit.  also serde would not be a portable network protocol format.
+    data: [u8; block_size() as usize], // serde had a strange 32 byte limit.  also serde would not be a portable network protocol format.
 }
 
 impl fmt::Display for ContentPacket {
@@ -156,10 +158,10 @@ impl fmt::Display for ContentPacket {
     }
 }
 
+const fn block_size() -> u64 {
+    1___0___2___4 // pointless use of Rust underline feature
+}
 impl ContentPacket {
-    const fn block_size() -> u64 {
-        1___0___2___4 // pointless use of Rust underline feature
-    }
     fn new_inbound_state(&self) -> Result<InboundState, std::io::Error> {
         Ok(InboundState {
                 lastreq: 0,
@@ -175,6 +177,7 @@ impl ContentPacket {
                 requested: 0,
                 bitmap: BitVec::from_elem(blocks(self.len) as usize, false),
                 dups:0,
+               start_time : SystemTime::now(),
             })
     }
 
@@ -184,7 +187,7 @@ impl ContentPacket {
         socket: &UdpSocket,
         file: &File,
     ) -> Result<(), std::io::Error> {
-        file.read_at(&mut self.data, self.offset * ContentPacket::block_size())?;
+        file.read_at(&mut self.data, self.offset * block_size())?;
         let encoded: [u8; std::mem::size_of::<Self>()] = unsafe { transmute(*self) };
         socket.send_to(&encoded[..], host).expect("cant send_to");
         // excuse to support Debug and Display
@@ -216,7 +219,7 @@ fn send(pathname: &String, host: &String) -> Result<(), std::io::Error> {
     socket.set_read_timeout(Some(Duration::new(1, 0)))?;
     let mut file = File::open(pathname)?;
     let metadata = fs::metadata(&pathname)?;
-    let buffer = [0; ContentPacket::block_size() as usize]; // vec![0; 32 as usize];
+    let buffer = [0; block_size() as usize]; // vec![0; 32 as usize];
     let mut started = false;
 
     let mut sha256 = Sha256::new();
@@ -259,7 +262,7 @@ fn send(pathname: &String, host: &String) -> Result<(), std::io::Error> {
 }
 
 fn blocks(len: u64) -> u64 {
-    return (len + ContentPacket::block_size() - 1) / ContentPacket::block_size();
+    return (len + block_size() - 1) / block_size();
 }
 
 fn receive() -> Result<(), std::io::Error> {
