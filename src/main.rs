@@ -83,8 +83,8 @@ impl InboundState {
         }
         self.highest_requested += 1;
 
-        let mut request_packet = RequestPacket {
-            offset: self.highest_requested;
+        let request_packet = RequestPacket {
+            offset: self.highest_requested,
             hash: self.hash,
         };
         println!("requesting block {:>6}", request_packet.offset);
@@ -134,8 +134,8 @@ impl InboundState {
             self.highest_requested += 1; // just increase window
             self.next_missing = self.highest_requested;
         }
-        let mut request_packet = RequestPacket {
-            offset: self.next_missing;
+        let request_packet = RequestPacket {
+            offset: self.next_missing,
             hash: self.hash,
         };
         println!("requesting block {:>6}", request_packet.offset);
