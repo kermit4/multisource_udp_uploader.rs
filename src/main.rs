@@ -21,12 +21,29 @@ struct InboundState {
     blocks_remaining: u64,
     next_missing: u64,
     requested: u64,
+    rereqs: u64,
     highest_seen: u64,
     bitmap: BitVec,
     highest_requested: u64,
     hash_checked: bool,
     dups: u64,
     start_time: SystemTime,
+}
+
+impl fmt::Display for InboundState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "rem/req/seen/missing/dups/rereqs: {}/{}/{}/{}/{}/{} window(est): {} avg B/s: {}",
+            self.blocks_remaining,
+            self.highest_requested,
+            self.highest_seen,
+            self.next_missing,
+            self.dups,
+            self.rereqs,
+            self.highest_requested - self.highest_seen,
+            (self.len - self.blocks_remaining * block_size())
+                / (self.start_time.elapsed().unwrap().as_secs() + 1),
+        )
+    }
 }
 
 impl InboundState {
@@ -58,8 +75,8 @@ impl InboundState {
         src: &SocketAddr,
     ) -> Result<(), std::io::Error> {
         if self.bitmap.get(content_packet.offset as usize).unwrap() {
-            println!("dup: {} dups: {}", content_packet.offset, self.dups);
             self.dups += 1;
+            println!("dup: {} dups: {}", content_packet.offset, self.dups);
         } else {
             self.file
                 .write_at(&content_packet.data, content_packet.offset * block_size())?;
@@ -70,14 +87,14 @@ impl InboundState {
             }
         }
 
-        println!(
-            "received block: {:>7}  remaining: {} window(est): {} avg B/s: {} ",
-            content_packet.offset,
-            self.blocks_remaining,
-            self.highest_requested - self.highest_seen,
-            (self.len - self.blocks_remaining * block_size())
-                / (self.start_time.elapsed().unwrap().as_secs() + 1)
-        );
+        println!("{}",content_packet);
+        println!("{}",self);
+
+        
+        
+        
+        
+        
         if self.blocks_remaining == 0 {
             if !self.hash_checked {
                 self.check_hash()?;
@@ -95,6 +112,7 @@ impl InboundState {
         }
         Ok(())
     }
+
 
     fn request_more(&mut self, socket: &UdpSocket, src: &SocketAddr) {
         if self.highest_requested + 1 >= blocks(self.len) {
@@ -160,7 +178,7 @@ struct ContentPacket {
 
 impl fmt::Display for ContentPacket {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "nothing here, just an excuse to use Display")
+        write!(f, "received {}",self.offset)
     }
 }
 
@@ -177,6 +195,7 @@ impl ContentPacket {
                 len: self.len,
                 blocks_remaining: blocks(self.len),
                 next_missing: 0,
+                rereqs: 0,
                 highest_seen: 0,
 				hash_checked: false,
                 hash: self.hash,
