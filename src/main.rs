@@ -19,12 +19,9 @@ struct InboundState {
     len: u64,
     hash: [u8; 256 / 8],
     blocks_remaining: u64,
-    next_missing: u64,
+    next_block: u64,
     requested: u64,
-    rereqs: u64,
-    highest_seen: u64,
     bitmap: BitVec,
-    highest_requested: u64,
     hash_checked: bool,
     dups: u64,
     start_time: SystemTime,
@@ -32,14 +29,10 @@ struct InboundState {
 
 impl fmt::Display for InboundState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "rem/req/seen/missing/dups/rereqs: {}/{}/{}/{}/{}/{} window(est): {} avg B/s: {}",
+        write!(f, "rem/next/dups: {}/{}/{} avg B/s: {}",
             self.blocks_remaining,
-            self.highest_requested,
-            self.highest_seen,
-            self.next_missing,
+            self.next_block,
             self.dups,
-            self.rereqs,
-            self.highest_requested - self.highest_seen,
             (self.len - self.blocks_remaining * block_size())
                 / (self.start_time.elapsed().unwrap().as_secs() + 1),
         )
@@ -74,7 +67,7 @@ impl InboundState {
         socket: &UdpSocket,
         src: &SocketAddr,
     ) -> Result<(), std::io::Error> {
-        println!("{}",content_packet);
+        println!("received {} window(est): {}",content_packet.offset,self.next_block-content_packet.offset);
         if self.bitmap.get(content_packet.offset as usize).unwrap() {
             self.dups += 1;
             println!("dup: {} dups: {}", content_packet.offset, self.dups);
@@ -83,82 +76,34 @@ impl InboundState {
                 .write_at(&content_packet.data, content_packet.offset * block_size())?;
             self.blocks_remaining -= 1;
             self.bitmap.set(content_packet.offset as usize, true);
-            if content_packet.offset > self.highest_seen {
-                self.highest_seen = content_packet.offset
-            }
         }
-        println!("{}",self);
-
-        
-        
-        
-        
-        
-        if self.blocks_remaining == 0 {
-            if !self.hash_checked {
-                self.check_hash()?;
-                self.hash_checked = true;
-                drop(&self.file); // free up a file descriptor
+        let mut request_packet = RequestPacket {
+            offset: !0,
+            hash: self.hash,
+        };
+        while { 
+            println!("{}",self);
+            if self.blocks_remaining == 0 {
+                if !self.hash_checked {
+                    self.check_hash()?;
+                    self.hash_checked = true;
+                    drop(&self.file); // free up a file descriptor
+                }
+            } else {
+                request_packet.offset=self.next_block;
+                while {
+                    self.next_block += 1;
+                    self.next_block %= blocks(self.len);
+                    self.bitmap.get(self.next_block as usize).unwrap() 
+                } {}
             }
-            let encoded: Vec<u8> = bincode::serialize(&RequestPacket {
-                offset: !0,
-                hash: self.hash,
-            })
-            .unwrap();
+            println!("requesting block {:>6}", request_packet.offset);
+            let encoded: Vec<u8> = bincode::serialize(&request_packet).unwrap();
             socket.send_to(&encoded[..], &src).expect("cant send_to");
-        } else {
-            self.request_more(socket, src);
-        }
-        Ok(())
-    }
-
-
-    fn request_more(&mut self, socket: &UdpSocket, src: &SocketAddr) {
-        if self.highest_requested + 1 == blocks(self.len) {
-            // just filling in holes or waiting for the tail now
-            self.request_missing_or_next(&socket, &src);
-            return;
-        }
-        self.highest_requested += 1;
-
-        let request_packet = RequestPacket {
-            offset: self.highest_requested,
-            hash: self.hash,
-        };
-        println!("requesting block {:>6}", request_packet.offset);
-        let encoded: Vec<u8> = bincode::serialize(&request_packet).unwrap();
-        socket.send_to(&encoded[..], &src).expect("cant send_to");
-        self.requested += 1;
-
-        if (self.requested % 100) == 0 {
-            // push it to 1% packet loss
-            self.request_missing_or_next(&socket, &src);
-        }
-    }
-
-    fn request_missing_or_next(&mut self, socket: &UdpSocket, src: &SocketAddr) {
-        if self.next_missing > self.highest_seen {
-            self.next_missing = 0;
-        }
-        while {
-            self.next_missing += 1;
-            self.next_missing %= blocks(self.len);
-            self.bitmap.get(self.next_missing as usize).unwrap()
+            self.requested+=1;
+            (self.requested % 100) == 0
         } {}
-        if self.next_missing > self.highest_seen  && self.highest_requested +1 != blocks(self.len) {
-            self.highest_requested += 1; // just increase window
-            self.next_missing = self.highest_requested;
-        } else {
-            self.rereqs +=1;
-        }
-        let request_packet = RequestPacket {
-            offset: self.next_missing,
-            hash: self.hash,
-        };
-        println!("requesting block {:>6}", request_packet.offset);
-        let encoded: Vec<u8> = bincode::serialize(&request_packet).unwrap();
-        socket.send_to(&encoded[..], &src).expect("cant send_to");
-        self.requested += 1;
+        Ok(())
     }
 }
 
@@ -172,11 +117,6 @@ struct ContentPacket {
     data: [u8; block_size() as usize], // serde had a strange 32 byte limit.  also serde would not be a portable network protocol format.
 }
 
-impl fmt::Display for ContentPacket {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "received {}",self.offset)
-    }
-}
 
 const fn block_size() -> u64 {
     1___0___2___4 // pointless use of Rust underline feature
@@ -184,15 +124,12 @@ const fn block_size() -> u64 {
 impl ContentPacket {
     fn new_inbound_state(&self) -> Result<InboundState, std::io::Error> {
         Ok(InboundState {
-                highest_requested: 0,
                 file:  // File::create(
 				OpenOptions::new().create(true).read(true).write(true)
                     .open(Path::new(&hex::encode(self.hash)))?,
                 len: self.len,
                 blocks_remaining: blocks(self.len),
-                next_missing: 0,
-                rereqs: 0,
-                highest_seen: 0,
+                next_block: 1,
 				hash_checked: false,
                 hash: self.hash,
                 requested: 0,
@@ -211,10 +148,6 @@ impl ContentPacket {
         file.read_at(&mut self.data, self.offset * block_size())?;
         let encoded: [u8; std::mem::size_of::<Self>()] = unsafe { transmute(*self) };
         socket.send_to(&encoded[..], host).expect("cant send_to");
-        // excuse to support Debug and Display
-        if self.offset == 0 {
-            println!("content packet: {}", self);
-        }
         Ok(())
     }
 }
@@ -269,7 +202,7 @@ fn send(pathname: &String, host: &String) -> Result<(), std::io::Error> {
                 break;
             }
         }
-        println!("sending block: {}", offset);
+//        println!("sending block: {}", offset);
         ContentPacket {
             len: metadata.len(),
             offset: offset,
