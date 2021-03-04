@@ -74,6 +74,7 @@ impl InboundState {
         socket: &UdpSocket,
         src: &SocketAddr,
     ) -> Result<(), std::io::Error> {
+        println!("{}",content_packet);
         if self.bitmap.get(content_packet.offset as usize).unwrap() {
             self.dups += 1;
             println!("dup: {} dups: {}", content_packet.offset, self.dups);
@@ -86,8 +87,6 @@ impl InboundState {
                 self.highest_seen = content_packet.offset
             }
         }
-
-        println!("{}",content_packet);
         println!("{}",self);
 
         
@@ -115,8 +114,8 @@ impl InboundState {
 
 
     fn request_more(&mut self, socket: &UdpSocket, src: &SocketAddr) {
-        if self.highest_requested + 1 >= blocks(self.len) {
-            // "done" but just filling in holes now
+        if self.highest_requested + 1 == blocks(self.len) {
+            // just filling in holes or waiting for the tail now
             self.request_missing_or_next(&socket, &src);
             return;
         }
@@ -146,14 +145,11 @@ impl InboundState {
             self.next_missing %= blocks(self.len);
             self.bitmap.get(self.next_missing as usize).unwrap()
         } {}
-        if self.next_missing > self.highest_seen {
-            // nothing missing
-            if self.highest_requested + 1 >= blocks(self.len) {
-                // on the tail, dont dup the window
-                return;
-            }
+        if self.next_missing > self.highest_seen  && self.highest_requested +1 != blocks(self.len) {
             self.highest_requested += 1; // just increase window
             self.next_missing = self.highest_requested;
+        } else {
+            self.rereqs +=1;
         }
         let request_packet = RequestPacket {
             offset: self.next_missing,
