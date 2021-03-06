@@ -2,13 +2,12 @@ WORKING AND FULL FEATURED
 
 (actually up to 19 hours now)
 
-This repo is only a snapshot to show my Rust learning speed, the applicability of my non-Rust background to Rust programming, and knowledge of Rust features.  This is not a port so some time went into logic, too.
+This repo is only a snapshot to show my Rust knowledge, the applicability of my non-Rust background to Rust programming, and knowledge of Rust features.  This is not a port so some time went into logic, too.
 
+earlier versions 
 https://github.com/kermit4/first_2_hours_of_rust     
 https://github.com/kermit4/first_8_hours_of_rust     
-https://github.com/kermit4/first_16_hours_of_rust      (this repo)
-
-I'm now attempting to use more Rust features and development tools than necessary, as it was working after 8 hours and full featured after 14.
+https://github.com/kermit4/first_16_hours_of_rust      
 
 If run with no args, it will listen for uploads.
 
