@@ -29,7 +29,9 @@ struct InboundState {
 
 impl fmt::Display for InboundState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "rem/next/dups: {}/{}/{} avg B/s: {}",
+        write!(
+            f,
+            "rem/next/dups: {}/{}/{} avg B/s: {}",
             self.blocks_remaining,
             self.next_block,
             self.dups,
@@ -40,8 +42,6 @@ impl fmt::Display for InboundState {
 }
 
 impl InboundState {
-
-
     // upload done
     fn check_hash(&mut self) -> Result<(), std::io::Error> {
         // this could be processed as received to reduce latency, but that may miss bugs
@@ -67,7 +67,11 @@ impl InboundState {
         socket: &UdpSocket,
         src: &SocketAddr,
     ) -> Result<(), std::io::Error> {
-        println!("received {} window(est): {}",content_packet.offset,self.next_block-content_packet.offset);
+        println!(
+            "received {} window(est): {}",
+            content_packet.offset,
+            self.next_block - content_packet.offset
+        );
         if self.bitmap.get(content_packet.offset as usize).unwrap() {
             self.dups += 1;
             println!("dup: {} dups: {}", content_packet.offset, self.dups);
@@ -81,8 +85,8 @@ impl InboundState {
             offset: !0,
             hash: self.hash,
         };
-        while { 
-            println!("{}",self);
+        while {
+            println!("{}", self);
             if self.blocks_remaining == 0 {
                 if !self.hash_checked {
                     self.check_hash()?;
@@ -90,18 +94,18 @@ impl InboundState {
                     drop(&self.file); // free up a file descriptor
                 }
             } else {
-                request_packet.offset=self.next_block;
-//                println!("{}",self.bitmap.iter().position(|x| x == false ).unwrap());
+                request_packet.offset = self.next_block;
+                //                println!("{}",self.bitmap.iter().position(|x| x == false ).unwrap());
                 while {
                     self.next_block += 1;
                     self.next_block %= blocks(self.len);
-                    self.bitmap.get(self.next_block as usize).unwrap() 
+                    self.bitmap.get(self.next_block as usize).unwrap()
                 } {}
             }
             println!("requesting block {:>6}", request_packet.offset);
             let encoded: Vec<u8> = bincode::serialize(&request_packet).unwrap();
             socket.send_to(&encoded[..], &src).expect("cant send_to");
-            self.requested+=1;
+            self.requested += 1;
             (self.requested % 100) == 0
         } {}
         Ok(())
@@ -117,7 +121,6 @@ struct ContentPacket {
     hash: [u8; 256 / 8],
     data: [u8; block_size() as usize], // serde had a strange 32 byte limit.  also serde would not be a portable network protocol format.
 }
-
 
 const fn block_size() -> u64 {
     1___0___2___4 // pointless use of Rust underline feature
