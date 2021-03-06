@@ -91,6 +91,7 @@ impl InboundState {
                 }
             } else {
                 request_packet.offset=self.next_block;
+//                println!("{}",self.bitmap.iter().position(|x| x == false ).unwrap());
                 while {
                     self.next_block += 1;
                     self.next_block %= blocks(self.len);
@@ -186,7 +187,7 @@ fn send(pathname: &String, host: &String) -> Result<(), std::io::Error> {
     loop {
         let mut offset = 0;
         if started {
-            let mut buf = [0; std::mem::size_of::<ContentPacket>()];
+            let mut buf = [0; 1000];
             match socket.recv_from(&mut buf) {
                 Ok(_r) => true,
                 Err(_e) => {
@@ -202,7 +203,7 @@ fn send(pathname: &String, host: &String) -> Result<(), std::io::Error> {
                 break;
             }
         }
-//        println!("sending block: {}", offset);
+        println!("sending block: {}", offset);
         ContentPacket {
             len: metadata.len(),
             offset: offset,

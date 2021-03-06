@@ -24,6 +24,3 @@ cargo run &
 
 should result in a file of the same content named by its sha256
 
-
-TODO:
-	fix edge case tail stall bug
