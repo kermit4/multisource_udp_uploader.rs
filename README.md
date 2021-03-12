@@ -1,6 +1,5 @@
 WORKING AND FULL FEATURED
 
-(actually up to 19 hours now)
 
 This was made to show my Rust knowledge, the applicability of my non-Rust background to Rust programming, and knowledge of Rust features.  This is not a port so some time went into logic, too.  It could be useful, though, if you had multiple locations with a large file, with differing upload speeds, that you wanted to send to one place, or one source that may be changing IPs, rebooting, or otherwise be interrupted.
 
