@@ -47,6 +47,7 @@ impl InboundState {
         // this could be processed as received to reduce latency, but that may miss bugs
 
         self.file.set_len(self.len)?;
+        println!("{}", self);
         println!("received {} dups {}", &hex::encode(&self.hash), self.dups);
         //			self.remove(&hex::encode(content_packet.hash));  this will just start over if packets are in flight, so it needs a delay
         let mut sha256 = Sha256::new();
@@ -75,7 +76,10 @@ impl InboundState {
         );
         if self.bitmap.get(content_packet.offset as usize).unwrap() {
             self.dups += 1;
-            println!("dup: {} dups: {}", content_packet.offset, self.dups);
+            println!("dup: {} dups: {} window(est): {}", content_packet.offset, self.dups
+                ,
+            self.next_block - content_packet.offset
+                );
         } else {
             self.file
                 .write_at(&content_packet.data, content_packet.offset * block_size())?;
