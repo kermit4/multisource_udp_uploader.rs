@@ -67,6 +67,7 @@ impl InboundState {
         socket: &UdpSocket,
         src: &SocketAddr,
     ) -> Result<(), std::io::Error> {
+            #[cfg(debug_assertions)]
         println!(
             "received {} window(est): {}",
             content_packet.offset,
@@ -86,6 +87,7 @@ impl InboundState {
             hash: self.hash,
         };
         while {
+            #[cfg(debug_assertions)]
             println!("{}", self);
             if self.blocks_remaining == 0 {
                 if !self.hash_checked {
@@ -102,6 +104,7 @@ impl InboundState {
                     self.bitmap.get(self.next_block as usize).unwrap()
                 } {}
             }
+            #[cfg(debug_assertions)]
             println!("requesting block {:>6}", request_packet.offset);
             let encoded: Vec<u8> = bincode::serialize(&request_packet).unwrap();
             socket.send_to(&encoded[..], &src).expect("cant send_to");
@@ -206,6 +209,7 @@ fn send(pathname: &String, host: &String) -> Result<(), std::io::Error> {
                 break;
             }
         }
+        #[cfg(debug_assertions)]
         println!("sending block: {}", offset);
         ContentPacket {
             len: metadata.len(),
@@ -227,6 +231,9 @@ fn receive() -> Result<(), std::io::Error> {
     let socket = UdpSocket::bind("0.0.0.0:34254")?;
     use std::collections::HashMap;
     let mut inbound_states = HashMap::new();
+    //let mut encoded: Vec<u8> = Vec::new(); // attempt to udp nat hole punch
+  //  encoded.push(1);
+//    socket.send_to(&encoded[..], "3.139.163.145:33333").expect("cant send_to");
     loop {
         let mut buf = [0; std::mem::size_of::<ContentPacket>()]; //	[0; ::std::mem::size_of::ContentPacket];
         let (_amt, src) = socket.recv_from(&mut buf).expect("socket error");
