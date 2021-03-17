@@ -57,8 +57,8 @@ impl InboundState {
             .as_slice()
             .try_into()
             .expect("Wrong Length");
-        println!("verified hash {}", &hex::encode(&hash));
         std::assert_eq!(hash, self.hash);
+        println!("verified hash {}", &hex::encode(&hash));
         Ok(())
     }
 
